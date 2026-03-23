@@ -32,11 +32,14 @@ private:
     double right_velocity;
     rclcpp::Time initial_time;
     bool loop_started = true;
+    bool L_finished = false;
 
     // methods
     void create_topics();
     void timer_callback();
     void calculate_velocity();
+    void draw_L(double time);
+    
 };
 
 #endif /*STEER_RELBOT_HPP_*/

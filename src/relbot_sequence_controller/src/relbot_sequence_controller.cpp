@@ -14,7 +14,8 @@ SteerRelbot::SteerRelbot() : Node("steer_relbot") {
     RCLCPP_INFO(this->get_logger(), "3. Straight then 90 degree left");
     RCLCPP_INFO(this->get_logger(), "4. Square");
 
-    rclcpp::Time initial_time = this->get_clock()->now();
+    initial_time = this->get_clock()->now();
+    RCLCPP_INFO(this->get_logger(), "Initial time: %f seconds", initial_time.seconds());
     // initialize timer
     timer_ = this->create_wall_timer(std::chrono::duration<double>(1/DEFAULT_SETPOINT_STREAM),
                                      std::bind(&SteerRelbot::timer_callback, this));
@@ -29,85 +30,85 @@ void SteerRelbot::create_topics() {
         "/input/right_motor/setpoint_vel", 1);
 }
 
+void SteerRelbot::draw_L(double time) {
+    const float LINE_TIME = 3; // Change this float to change how long it takes to complete the shape in seconds
+    const float CURVE_TIME = 6;
+    const float EDGE_TIME = LINE_TIME + CURVE_TIME;
+
+    if(time < LINE_TIME){
+        left_velocity = 5;
+        right_velocity = -5;
+    }
+    else if(time < EDGE_TIME && time >= LINE_TIME){
+        left_velocity = 2.02;
+        right_velocity = -1;
+    }
+    else if(time < LINE_TIME + EDGE_TIME && time >= EDGE_TIME){
+        left_velocity = 5;
+        right_velocity = -5;
+    }
+    else if(time >= LINE_TIME + EDGE_TIME){
+        left_velocity = 0;
+        right_velocity = 0;
+        L_finished = true;
+    }
+     
+}
+
 void SteerRelbot::calculate_velocity() {
-    
-    
-    static int shape_choice = 1; // Change this integer to change the shape the robot will drive in
-    
+        
     /* Change the code here: */
-    //static rclcpp::Time initial_time = this->get_clock()->now();
+    static int shape_choice = 4; // Change this integer to change the shape the robot will drive in
     rclcpp::Time current_time = this->get_clock()->now();
     
     double elapsed_time = (current_time - initial_time).seconds();
-    RCLCPP_INFO(this->get_logger(), "Elapsed time: %f seconds", elapsed_time);
-
-    if (!loop_started) {
-        initial_time = current_time;
+    //RCLCPP_INFO(this->get_logger(), "Elapsed time: %f seconds", elapsed_time);
+    
+    /*
+    const float LINE_TIME = 5; // Change this float to change how long it takes to complete the shape in seconds
+    const float CURVE_TIME = 6;
+    const float EDGE_TIME = LINE_TIME + CURVE_TIME;
+    */
+    
+    
+    if(!loop_started){
         loop_started = true;
+        initial_time = current_time;
     }
-    if (loop_started){
+    
+    if(loop_started){
         switch (shape_choice) {
             case 1:
+                //RCLCPP_INFO(this->get_logger(), "This is a straight line.");
                 left_velocity = 5;
                 right_velocity = -5;
                 break;
             case 2:
+                //RCLCPP_INFO(this->get_logger(), "This is a circle.");
                 left_velocity = 5;
-                right_velocity = -3;
+                right_velocity = -4;
                 break;
             case 3:
-                left_velocity = 0;
-                right_velocity = 0;
+                //RCLCPP_INFO(this->get_logger(), "This is a straight then 90 degree left.");
+                SteerRelbot::draw_L(elapsed_time);
                 break;
             case 4:
-                left_velocity = 0;
-                right_velocity = 0;
+                //RCLCPP_INFO(this->get_logger(), "This is a square");    
+                SteerRelbot::draw_L(elapsed_time);
+                if (L_finished){
+                    loop_started = false;
+                    L_finished = false;
+                }
                 break;
             default:
-                left_velocity = 5;
-                right_velocity = -5;
+                RCLCPP_INFO(this->get_logger(), "Invalid choice");
+                left_velocity = 0;
+                right_velocity = 0;
         }
     }
     /* End of your algorithm */
 
-    //left_velocity = 0;
-    //right_velocity = 0;
-    /*int shape_choice;
-    std::cout << "Tell me what shape you want to drive in: " << std::endl;
-    std::cout << "1. Straight Line" << std::endl;
-    std::cout << "2. Circle" << std::endl;
-    std::cout << "3. Straight then 90 degree left" << std::endl;
-    std::cout << "4. Square" << std::endl;
-    std::cin >> shape_choice;
     
-
-
-    
-    switch (shape_choice) {
-        case 1:
-            std::cout << "You chose straight line." << std::endl;
-            left_velocity = 5;
-            right_velocity = -5;
-            break;
-        case 2:
-            std::cout << "You chose circle." << std::endl;
-            left_velocity = 5;
-            right_velocity = -3;
-            break;
-        case 3:
-            std::cout << "You chose straight then 90 degree left." << std::endl;
-            left_velocity = 0;
-            right_velocity = 0;
-            break;
-        case 4:
-            std::cout << "You chose square." << std::endl;
-            left_velocity = 0;
-            right_velocity = 0;
-            break;
-        default:
-            std::cout << "Invalid choice, defaulting to straight line." << std::endl;
-    }
-    */
 }
 
 void SteerRelbot::timer_callback() {

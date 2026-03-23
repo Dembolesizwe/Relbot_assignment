@@ -4,5 +4,5 @@ source ~/Relbot_ws/install/setup.bash
 
 
 Then run this to build and run your files: 
-ros2 launch relbot_launch relbot_system.launch.py
+ros2 launch relbot_launch relbot_sequence_controller.launch.py
 
