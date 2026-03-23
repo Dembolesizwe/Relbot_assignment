@@ -14,9 +14,9 @@ add_compile_options(-Wno-psabi) # Suppress warnings about ABI changes in GCC 7.1
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(example_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(relbot_msgs)
 find_package(OpenCV REQUIRED COMPONENTS core highgui imgcodecs imgproc videoio)
 find_package(cv_bridge REQUIRED)
 
@@ -41,9 +41,9 @@ common/xxmatrix.cpp)
 
 ament_target_dependencies(relbot_simulator 
   rclcpp 
+  example_interfaces 
   sensor_msgs 
   geometry_msgs
-  relbot_msgs
   cv_bridge
 )
 
@@ -75,3 +75,9 @@ if(BUILD_TESTING)
 endif()
 
 ament_package()
+
+# # install the launch directory
+# install(DIRECTORY
+#   launch
+#   DESTINATION share/${PROJECT_NAME}/
+# )

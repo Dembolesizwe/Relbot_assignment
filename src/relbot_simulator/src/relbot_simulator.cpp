@@ -18,14 +18,12 @@ RELbotSimulator::RELbotSimulator(double time_step) : Node("RELbot_simulator")
 
   dynamics_timer_ = this->create_wall_timer(std::chrono::duration<double>(time_step), std::bind(&RELbotSimulator::dynamics_timer_callback, this));
 
-  visualisation_output_timer_ = this->create_wall_timer(std::chrono::duration<double>(1/visualisation_frequency), std::bind(&RELbotSimulator::visualisation_output_timer_callback, this));
-
   image_stream_timer_ = this->create_wall_timer(std::chrono::duration<double>(1.0 / image_stream_FPS), std::bind(&RELbotSimulator::image_stream_timer_callback, this));
 
   RCLCPP_INFO(get_logger(), "Created Timer");
 
-  input_vector[0] = 0.0; /* steer_left */
-  input_vector[1] = 0.0; /* steer_right */
+  input_vector[0] = 0; /* steer_left */
+  input_vector[1] = 0; /* steer_right */
 
   output_vector[0] = 0.0; /* pos_feedback_left */
   output_vector[1] = 0.0; /* pos_feedback_right */
@@ -41,9 +39,8 @@ RELbotSimulator::RELbotSimulator(double time_step) : Node("RELbot_simulator")
 
 void RELbotSimulator::create_topics()
 {
-  image_stream_FPS = this->declare_parameter<double>("image_stream_FPS", RELbotSimulator::DEFAULT_IMAGE_STREAM_FPS);
-  throttle_rate_ = this->declare_parameter("throttle_rate", 1.0);
-  visualisation_frequency = this->declare_parameter("visual_frequency_turtlesim", 62.5);
+  declare_parameter<bool>("use_twist_cmd", RELbotSimulator::DEFAULT_USE_TWIST_CMD);
+  declare_parameter<double>("image_stream_FPS", RELbotSimulator::DEFAULT_IMAGE_STREAM_FPS);
 
   RCLCPP_INFO(this->get_logger(), "Creating topics...");
   RCLCPP_INFO(this->get_logger(), "Creating Publishers");
@@ -52,9 +49,10 @@ void RELbotSimulator::create_topics()
   moving_camera_output_topic_ = this->create_publisher<sensor_msgs::msg::Image>("output/moving_camera", 1);
   camera_position_topic_ = this->create_publisher<geometry_msgs::msg::PointStamped>("output/camera_position", 1);
   robot_pose_topic = this->create_publisher<geometry_msgs::msg::PoseStamped>("output/robot_pose", 1);
-  turtlesim_visualisation = this->create_publisher<geometry_msgs::msg::Twist>("/turtle1/cmd_vel", 1);
 
-
+  // get param, can be set by ros2 launch command
+  useTwistCmd_ = get_parameter("use_twist_cmd").as_bool();
+  image_stream_FPS = get_parameter("image_stream_FPS").as_double();
 
   RCLCPP_INFO(this->get_logger(), "Creating Subscriptions");
   RCLCPP_INFO(this->get_logger(), "Subscribing to %s", RELbotSimulator::WEBCAM_IMAGE.c_str());
@@ -62,13 +60,34 @@ void RELbotSimulator::create_topics()
   webcam_input_topic_ = this->create_subscription<sensor_msgs::msg::Image>(
       RELbotSimulator::WEBCAM_IMAGE, 10, std::bind(&RELbotSimulator::webcam_topic_callback, this, _1));
 
-  
-  // The motor topic is in a namespace, construct the full topic name first
-  const std::string motor_setpoint_velocity_topic = RELbotSimulator::SETPOINT_VEL_TOPIC;
-  RELbotSimulator::motor_velocity_Subscriber_ = create_subscription<relbot_msgs::msg::RelbotMotors>(
-      motor_setpoint_velocity_topic, 10,
-      std::bind(&RELbotSimulator::motorVelocityCallback, this, std::placeholders::_1));
-  RCLCPP_INFO(get_logger(), "Subscribed to topic %s", motor_setpoint_velocity_topic.c_str());
+  if (RELbotSimulator::useTwistCmd_)
+  {
+    RCLCPP_INFO(get_logger(), "Using Twist Command mode");
+
+    RELbotSimulator::twistSubscriber_ = create_subscription<geometry_msgs::msg::Twist>(
+        RELbotSimulator::TWIST_TOPIC, rclcpp::SensorDataQoS().reliable(),
+        std::bind(&RELbotSimulator::twistCallback, this, std::placeholders::_1));
+    RCLCPP_INFO(get_logger(), "Subscribed to topic %s", RELbotSimulator::TWIST_TOPIC.c_str());
+  }
+  else
+  {
+    RCLCPP_INFO(get_logger(), "Using Individual Motors Command mode");
+
+    // The motor topics are in a namespace, construct the full topic name first
+    const std::string right_motor_setpoint_vel_topic =
+        RELbotSimulator::RIGHT_MOTOR_NAMESPACE + RELbotSimulator::SETPOINT_VEL_TOPIC;
+    RELbotSimulator::rightMotorSetpointVelSubscriber_ = create_subscription<example_interfaces::msg::Float64>(
+        right_motor_setpoint_vel_topic, 10,
+        std::bind(&RELbotSimulator::rightMotorSetpointVelCallback, this, std::placeholders::_1));
+    RCLCPP_INFO(get_logger(), "Subscribed to topic %s", right_motor_setpoint_vel_topic.c_str());
+
+    const std::string left_motor_setpoint_vel_topic =
+        RELbotSimulator::LEFT_MOTOR_NAMESPACE + RELbotSimulator::SETPOINT_VEL_TOPIC;
+    RELbotSimulator::leftMotorSetpointVelSubscriber_ = create_subscription<example_interfaces::msg::Float64>(
+        left_motor_setpoint_vel_topic, 10,
+        std::bind(&RELbotSimulator::leftMotorSetpointVelCallback, this, std::placeholders::_1));
+    RCLCPP_INFO(get_logger(), "Subscribed to topic %s", left_motor_setpoint_vel_topic.c_str());
+  }
 }
 
 // Input from Subscriptions
@@ -78,14 +97,38 @@ void RELbotSimulator::webcam_topic_callback(const sensor_msgs::msg::Image::Share
   input_image = msg_cam_img;
 }
 
-void RELbotSimulator::motorVelocityCallback(const relbot_msgs::msg::RelbotMotors motor_velocity_cmd)
+void RELbotSimulator::twistCallback(const geometry_msgs::msg::Twist::SharedPtr twist)
 {
+  // Extract the base link velocity components from the twist
+  double linearVelSetpoint = twist->linear.x;
+  double angularVelSetpoint = twist->angular.z;
 
-  double left_wheel_vel = motor_velocity_cmd.left_wheel_vel;
-  double right_wheel_vel = motor_velocity_cmd.right_wheel_vel;
+  double left_wheel_vel;
+  double right_wheel_vel;
+
+  // Convert the base link velocity setpoints to individual motor setpoints
+  // Don't forget: everything is right hand defined, so w_L CCW = FW
+    /* Hi students, code author here. Twists and reference frames are confusing and need rigid definitions. Even ChatGPT struggled with comprehending this 😃. 
+    Also, just using separate wheel velocities is totally okay and the originally intended way to control this sim 😉 */
+  left_wheel_vel = -((linearVelSetpoint - ((angularVelSetpoint * wheelBaseWidth_) / 2)) / wheelRadius_);
+  right_wheel_vel = ((linearVelSetpoint + ((angularVelSetpoint * wheelBaseWidth_) / 2)) / wheelRadius_);
+
 
   input_vector[0] = left_wheel_vel / RADS_TO_DUTY_CYCLE;
   input_vector[1] = right_wheel_vel / RADS_TO_DUTY_CYCLE;
+
+}
+
+void RELbotSimulator::rightMotorSetpointVelCallback(const example_interfaces::msg::Float64::SharedPtr setpointVel)
+{
+  input_vector[1] = (setpointVel->data) / RADS_TO_DUTY_CYCLE;
+  // velRightMotorSetpoint_ = setpointVel->data;
+}
+
+void RELbotSimulator::leftMotorSetpointVelCallback(const example_interfaces::msg::Float64::SharedPtr setpointVel)
+{
+  input_vector[0] = (setpointVel->data) / RADS_TO_DUTY_CYCLE;
+  // velLeftMotorSetpoint_ = setpointVel->data;
 }
 
 // Timer Callback Dynamics. Calulates kinematics and dynamics
@@ -105,58 +148,11 @@ void RELbotSimulator::dynamics_timer_callback()
 
   rclcpp::Duration duration = get_clock()->now() - clock_start;
 
-  RCLCPP_INFO_THROTTLE(this->get_logger(), clock, throttle_rate_, "Sim state!   [time, x,y, θz] = [%f, %f, %f, %f]", duration.seconds(), output_vector[2], output_vector[3], output_vector[4]);
+  RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 500, "Sim state!   [time, x,y, θz] = [%f, %f, %f, %f]", duration.seconds(), output_vector[2], output_vector[3], output_vector[4]);
 
   // Output the actual position
   robot_pose_topic->publish(robot_pose);
 }
-
-void RELbotSimulator::visualisation_output_timer_callback()
-{
-  // Data handling
-  prev_x = x;
-  prev_y = y;
-  prev_theta = theta;
-  prev_seconds = seconds;
-  prev_nanosec = nanosec;
-
-  // get new pose
-  x = output_vector[2];
-  y = output_vector[3];
-  theta = output_vector[4];  // in radiants
-  seconds = get_clock()->now().seconds();
-  nanosec = get_clock()->now().nanoseconds();
-
-  // calculation
-
-  float time = (seconds - prev_seconds) + ((int)nanosec - (int)prev_nanosec) * 0.000000001;
-  if (time == 0) {
-      return;
-  }
-
-  // calculate speed in ground fixed frame
-  float x_speed = (x - prev_x) / time;
-  float y_speed = (y - prev_y) / time;
-  theta_speed_fixed = (theta - prev_theta) / time;
-
-  // convert to body fixed frame (theta is the same as for ground fixed frame)
-  // We pick the largest, as dividing by a small value will result in floating point errors.
-  if (abs(std::cos(theta)) < abs(std::sin(theta))) {
-      x_speed_fixed = y_speed / std::sin(theta);
-  } else {
-      x_speed_fixed = x_speed / std::cos(theta);
-  }
-
-  // Publish
-
-  // publish to turtlesim
-  geometry_msgs::msg::Twist twist;
-  twist.linear.x = x_speed_fixed;
-  twist.angular.z = theta_speed_fixed;
-  turtlesim_visualisation->publish(twist);
-
-}
-
 
 // Timer Callback Image + CV specific functions
 
@@ -180,7 +176,7 @@ void RELbotSimulator::image_stream_timer_callback()
   */
   if (input_image == nullptr)
   {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), clock, throttle_rate_, "No Input image received");
+    RCLCPP_WARN_THROTTLE(this->get_logger(), clock, 1000, "No Input image received");
     return;
   }
 

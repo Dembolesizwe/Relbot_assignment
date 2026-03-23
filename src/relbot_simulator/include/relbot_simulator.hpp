@@ -9,15 +9,18 @@
 // ROS Client Library CPP
 #include "rclcpp/rclcpp.hpp"
 
+// Standard Message types
+#include "example_interfaces/msg/float64.hpp"
+
 // Sensor message types related to images
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/image_encodings.hpp"
 #include "sensor_msgs/fill_image.hpp"
 
 // Geometry messages, used for location notation
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/twist.hpp"
 
 // OpenCV imshow
 #include "opencv2/core/mat.hpp"
@@ -33,8 +36,6 @@
     #error "Required cv_bridge header file not found"
 #endif
 
-// Motor messages, used for moter speed input
-#include "relbot_msgs/msg/relbot_motors.hpp"
 // Self written headers
 #include "Plant.h"
 
@@ -63,8 +64,10 @@ public:
   const std::string output = "/output";
 
   // Default input topic names
-  
-  const std::string SETPOINT_VEL_TOPIC = input + "/motor_cmd";
+  const std::string TWIST_TOPIC = input + "/twist";
+  const std::string SETPOINT_VEL_TOPIC = "/setpoint_vel";
+  const std::string RIGHT_MOTOR_NAMESPACE = input + "/right_motor";
+  const std::string LEFT_MOTOR_NAMESPACE = input + "/left_motor";
   const std::string WEBCAM_IMAGE = "/image";
 
   // Default ouput topic names
@@ -91,18 +94,19 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr camera_position_topic_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr robot_pose_topic;
 
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr turtlesim_visualisation;
+  // Timer to run the simulator step function peridically
+  rclcpp::TimerBase::SharedPtr timer_;
 
- 
   // Subscribers for motor commands
-  rclcpp::Subscription<relbot_msgs::msg::RelbotMotors>::SharedPtr motor_velocity_Subscriber_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr twistSubscriber_;
+  rclcpp::Subscription<example_interfaces::msg::Float64>::SharedPtr rightMotorSetpointVelSubscriber_;
+  rclcpp::Subscription<example_interfaces::msg::Float64>::SharedPtr leftMotorSetpointVelSubscriber_;
 
   // // Publisher for joint state
 
   // Dynamics simulation timer (plus position output)
   rclcpp::TimerBase::SharedPtr dynamics_timer_;
   rclcpp::TimerBase::SharedPtr image_stream_timer_;
-  rclcpp::TimerBase::SharedPtr visualisation_output_timer_;
 
   Plant _20Sim_rt_sim = Plant();
 
@@ -112,32 +116,22 @@ private:
 
   rclcpp::Clock clock;
 
-  // Parameter storage and init
+  // input_vector[0] /* steer_left Duty cycle*/
+  // input_vector[1] /* steer_right Dutcy cycle*/
+
+  // steer = Duty cycle
+  // steer 1 = 27.5 rad/s: Full steer signal approx 1.375 m/s
+  // rad/s -> duty = rad/s / 27.5 = duty
+
+  // output_vector[0] /* pos_feedback_left */
+  // output_vector[1] /* pos_feedback_right */
+  // output_vector[2] /* Position_x {m} */
+  // output_vector[3] /* Position_y {m} */
+  // output_vector[4] /* Theta z (radians) */
+
   bool useTwistCmd_ = DEFAULT_USE_TWIST_CMD;
 
   double image_stream_FPS = DEFAULT_IMAGE_STREAM_FPS;
-  double throttle_rate_ = 1.0;
-  double visualisation_frequency = 62.5;
-
-  // Storage for relbout output position to twist calculation
-  // positions used in calculations
-  float x = 0;
-  float y = 0;
-  float theta = 0;
-  int seconds = 0;
-  uint nanosec = 0;
-  
-  // previous positions
-  float prev_x = 0;
-  float prev_y = 0;
-  float prev_theta = 0;
-  int prev_seconds = 0;
-  uint prev_nanosec = 0;
-
-  // speed to send to turtlesim
-  float x_speed_fixed;
-  float theta_speed_fixed;
-
 
   // Container for building the output image as a message type.
   cv::Mat output_image_;
@@ -162,27 +156,34 @@ private:
   void webcam_topic_callback(const sensor_msgs::msg::Image::SharedPtr msg_cam_img);
 
   /**
-   * @brief Callback for receiving the motor velocity
-   * 
-   * @param motor_velocity 
+   * @brief Callback upon receiving a Twist command velocity. Converts twist into individual motor commands to store
+   * internally for the next simulation step.
+   *
+   * @param twist Velocity (in rad/s and m/s) for motor to be set
    */
-  void motorVelocityCallback(const relbot_msgs::msg::RelbotMotors motor_velocity_cmd);
+  void twistCallback(const geometry_msgs::msg::Twist::SharedPtr twist);
 
-  // Timers
+  /**
+   * @brief Callback upon receiving the right motor command velocity. Stores this command internally for the next
+   * simulation step.
+   *
+   * @param setpoinVel setpoint velocity for right motor
+   */
+  void rightMotorSetpointVelCallback(const example_interfaces::msg::Float64::SharedPtr setpointVel);
+
+  /**
+   * @brief Callback upon receiving the left motor command velocity. Stores this command internally for the next
+   * simulation step.
+   *
+   * @param setpiontVel setpoint velocity for left motor
+   */
+  void leftMotorSetpointVelCallback(const example_interfaces::msg::Float64::SharedPtr setpointVel);
 
   /**
    * @brief Main step loop of the system. Calls the hidden Dynamics object to update to the next timestep
    *
    */
   void dynamics_timer_callback();
-
-    /**
-   * @brief Secondary loop of the system, which outputs the achieved system movement to a Twist such that it can be used for visualisation
-   *
-   */
-  void visualisation_output_timer_callback();
-
-  // Image handling
 
   /**
    * @brief Consitently outputs the webcam stream of the system. Runs at 30 FPS by default, can be set by ROS param

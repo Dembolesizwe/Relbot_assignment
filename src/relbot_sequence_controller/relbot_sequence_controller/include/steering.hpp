@@ -30,6 +30,8 @@ private:
     // attributes
     double left_velocity;
     double right_velocity;
+    rclcpp::Time initial_time;
+    bool loop_started = true;
 
     // methods
     void create_topics();
