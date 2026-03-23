@@ -30,8 +30,9 @@ private:
     // attributes
     double left_velocity;
     double right_velocity;
-    rclcpp::Time initial_time;
-    bool loop_started = true;
+
+    rclcpp::Time initial_time; //finds the initial time
+    //bool loop_started = true;
     bool L_finished = false;
 
     // methods

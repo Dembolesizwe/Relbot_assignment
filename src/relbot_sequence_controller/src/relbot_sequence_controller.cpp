@@ -34,20 +34,25 @@ void SteerRelbot::draw_L(double time) {
     const float LINE_TIME = 3; // Change this float to change how long it takes to complete the shape in seconds
     const float CURVE_TIME = 6;
     const float EDGE_TIME = LINE_TIME + CURVE_TIME;
+    //RCLCPP_INFO(this->get_logger(), "Im inside draw L function");
 
     if(time < LINE_TIME){
+        //draw a straight line
         left_velocity = 5;
         right_velocity = -5;
     }
     else if(time < EDGE_TIME && time >= LINE_TIME){
+        //draw a 90 degree left turn
         left_velocity = 2.02;
         right_velocity = -1;
     }
     else if(time < LINE_TIME + EDGE_TIME && time >= EDGE_TIME){
+        //draw a straight line
         left_velocity = 5;
         right_velocity = -5;
     }
     else if(time >= LINE_TIME + EDGE_TIME){
+        //stop moving and reset the flag so that the shape can be drawn again
         left_velocity = 0;
         right_velocity = 0;
         L_finished = true;
@@ -71,12 +76,14 @@ void SteerRelbot::calculate_velocity() {
     */
     
     
-    if(!loop_started){
-        loop_started = true;
+    /*
+    if(!L_finished){
+        //loop_started = true;
         initial_time = current_time;
     }
+    */
     
-    if(loop_started){
+    if(!L_finished){
         switch (shape_choice) {
             case 1:
                 //RCLCPP_INFO(this->get_logger(), "This is a straight line.");
@@ -96,8 +103,9 @@ void SteerRelbot::calculate_velocity() {
                 //RCLCPP_INFO(this->get_logger(), "This is a square");    
                 SteerRelbot::draw_L(elapsed_time);
                 if (L_finished){
-                    loop_started = false;
+                    //loop_started = false;
                     L_finished = false;
+                    initial_time = current_time;
                 }
                 break;
             default:
