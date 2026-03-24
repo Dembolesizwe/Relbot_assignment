@@ -31,11 +31,11 @@ void SteerRelbot::create_topics() {
 }
 
 void SteerRelbot::draw_L(double time) {
-    const float LINE_TIME = 3; // Change this float to change how long it takes to complete the shape in seconds
-    const float CURVE_TIME = 6;
-    const float EDGE_TIME = LINE_TIME + CURVE_TIME;
-    //RCLCPP_INFO(this->get_logger(), "Im inside draw L function");
 
+    const float LINE_TIME = 3; // Change this to change the length of the line segments
+    const float CURVE_TIME = 6; //this timer was adjusted to make the curves around 90 degrees
+    const float EDGE_TIME = LINE_TIME + CURVE_TIME; //this was created to make the code more readable
+    
     if(time < LINE_TIME){
         //draw a straight line
         left_velocity = 5;
@@ -63,57 +63,58 @@ void SteerRelbot::draw_L(double time) {
 void SteerRelbot::calculate_velocity() {
         
     /* Change the code here: */
-    static int shape_choice = 4; // Change this integer to change the shape the robot will drive in
+
+    // Change this integer to change the shape the robot will drive in
+    // 1. Straight Line
+    // 2. Circle
+    // 3. Straight then 90 degree left
+    // 4. Square
+    
+    static int shape_choice = 1; 
+
+    //find the current time
     rclcpp::Time current_time = this->get_clock()->now();
     
+    //caculate the elapsed time since the start of the program
     double elapsed_time = (current_time - initial_time).seconds();
     //RCLCPP_INFO(this->get_logger(), "Elapsed time: %f seconds", elapsed_time);
     
-    /*
-    const float LINE_TIME = 5; // Change this float to change how long it takes to complete the shape in seconds
-    const float CURVE_TIME = 6;
-    const float EDGE_TIME = LINE_TIME + CURVE_TIME;
-    */
     
-    
-    /*
-    if(!L_finished){
-        //loop_started = true;
-        initial_time = current_time;
+    switch (shape_choice) {
+        case 1:
+            //This is a straight line
+            //The velocities are equal in opposite directions to make the robot go straight       
+            left_velocity = 5;
+            right_velocity = -5;
+            break;
+        case 2:
+            //This is a circle
+            //The velocities are different to make the robot turn in a circle
+            left_velocity = 5;
+            right_velocity = -4;
+            break;
+        case 3:
+            //This is a straight line followed by a 90 degree left turn
+            //This method was created to make the code more readable and to avoid having a lot of if statements in this switch statement
+            SteerRelbot::draw_L(elapsed_time); 
+            break;
+        case 4:
+            //This is a square
+            //This is used to draw a corner of the square
+            SteerRelbot::draw_L(elapsed_time);
+
+            //this is used to restart the timer to draw the next corner of the square after the first corner is finished
+            if (L_finished){
+                L_finished = false;
+                initial_time = current_time;
+            }
+            break;
+        default:
+            RCLCPP_INFO(this->get_logger(), "Invalid choice");
+            left_velocity = 0;
+            right_velocity = 0;
     }
-    */
     
-    if(!L_finished){
-        switch (shape_choice) {
-            case 1:
-                //RCLCPP_INFO(this->get_logger(), "This is a straight line.");
-                left_velocity = 5;
-                right_velocity = -5;
-                break;
-            case 2:
-                //RCLCPP_INFO(this->get_logger(), "This is a circle.");
-                left_velocity = 5;
-                right_velocity = -4;
-                break;
-            case 3:
-                //RCLCPP_INFO(this->get_logger(), "This is a straight then 90 degree left.");
-                SteerRelbot::draw_L(elapsed_time);
-                break;
-            case 4:
-                //RCLCPP_INFO(this->get_logger(), "This is a square");    
-                SteerRelbot::draw_L(elapsed_time);
-                if (L_finished){
-                    //loop_started = false;
-                    L_finished = false;
-                    initial_time = current_time;
-                }
-                break;
-            default:
-                RCLCPP_INFO(this->get_logger(), "Invalid choice");
-                left_velocity = 0;
-                right_velocity = 0;
-        }
-    }
     /* End of your algorithm */
 
     
