@@ -70,7 +70,7 @@ void SteerRelbot::calculate_velocity() {
     // 3. Straight then 90 degree left
     // 4. Square
     
-    static int shape_choice = 1; 
+    static int shape_choice = 4; 
 
     //find the current time
     rclcpp::Time current_time = this->get_clock()->now();
