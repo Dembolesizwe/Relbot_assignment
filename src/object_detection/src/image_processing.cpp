@@ -1,10 +1,87 @@
-#include <cstdio>
+#include <memory>
+#include <string>
 
-int main(int argc, char ** argv)
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/image.hpp"
+#include "geometry_msgs/msg/point.hpp"
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp>
+
+class GreenObjectDetector : public rclcpp::Node
 {
-  (void) argc;
-  (void) argv;
+public:
+  GreenObjectDetector()
+  : Node("green_object_detector")
+  {
+    //Subscribe to the image topic
+    subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
+      "/image", 10, std::bind(&GreenObjectDetector::compute_center, this, std::placeholders::_1));
 
-  printf("hello world object_detection package\n");
+    //Publish the coordinates of the detected object
+    publisher_ = this->create_publisher<geometry_msgs::msg::Point>("/object_center", 10);
+    
+    RCLCPP_INFO(this->get_logger(), "Green Object Detector Node has been started.");
+  }
+
+private:
+  void compute_center(const sensor_msgs::msg::Image::SharedPtr msg)
+  {
+    cv::Mat cv_image;
+    try {
+      cv_image = cv_bridge::toCvShare(msg, "bgr8")->image;
+    } catch (cv_bridge::Exception &e) {
+      RCLCPP_ERROR(this->get_logger(), "CV Bridge Error: %s", e.what());
+      return;
+    }
+
+    // Convert BGR to HSV
+    cv::Mat hsv;
+    cv::cvtColor(cv_image, hsv, cv::COLOR_BGR2HSV);
+
+    // Green color range
+    cv::Scalar lower_green(40, 50, 50);
+    cv::Scalar upper_green(90, 255, 255);
+
+    cv::Mat mask;
+    cv::inRange(hsv, lower_green, upper_green, mask);
+
+    // Find contours
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    if (!contours.empty()) {
+      // Largest contour
+      auto largest = std::max_element(contours.begin(), contours.end(),
+        [](const std::vector<cv::Point> &a, const std::vector<cv::Point> &b){
+          return cv::contourArea(a) < cv::contourArea(b);
+        });
+
+      cv::Moments M = cv::moments(*largest);
+      if (M.m00 > 0) {
+        double cx = M.m10 / M.m00;
+        double cy = M.m01 / M.m00;
+
+        // Publish center
+        geometry_msgs::msg::Point point_msg;
+        point_msg.x = cx;
+        point_msg.y = cy;
+        point_msg.z = 0.0;
+        publisher_->publish(point_msg);
+
+        RCLCPP_INFO(this->get_logger(), "Green object center: x=%.1f, y=%.1f", cx, cy);
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(), "No green object detected");
+    }
+  }
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
+  rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr publisher_;
+};
+
+int main(int argc, char * argv[])
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<GreenObjectDetector>());
+  rclcpp::shutdown();
   return 0;
 }
