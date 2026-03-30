@@ -1,5 +1,5 @@
 #include "steering.hpp"
-#include <iostream>
+
 
 SteerRelbot::SteerRelbot() : Node("steer_relbot") {
     RCLCPP_INFO(this->get_logger(), "Init");
@@ -8,11 +8,11 @@ SteerRelbot::SteerRelbot() : Node("steer_relbot") {
     create_topics();
     RCLCPP_INFO(this->get_logger(), "Created Topics");
 
-    RCLCPP_INFO(this->get_logger(), "Change the integer value in the code to change the shape:");
-    RCLCPP_INFO(this->get_logger(), "1. Straight Line");
-    RCLCPP_INFO(this->get_logger(), "2. Circle");
-    RCLCPP_INFO(this->get_logger(), "3. Straight then 90 degree left");
-    RCLCPP_INFO(this->get_logger(), "4. Square");
+    // RCLCPP_INFO(this->get_logger(), "Change the integer value in the code to change the shape:");
+    // RCLCPP_INFO(this->get_logger(), "1. Straight Line");
+    // RCLCPP_INFO(this->get_logger(), "2. Circle");
+    // RCLCPP_INFO(this->get_logger(), "3. Straight then 90 degree left");
+    // RCLCPP_INFO(this->get_logger(), "4. Square");
 
     initial_time = this->get_clock()->now();
     RCLCPP_INFO(this->get_logger(), "Initial time: %f seconds", initial_time.seconds());
@@ -28,6 +28,10 @@ void SteerRelbot::create_topics() {
 
     right_wheel_topic_ = this->create_publisher<example_interfaces::msg::Float64>(
         "/input/right_motor/setpoint_vel", 1);
+
+    green_object_position_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
+        "/object_center", 10, std::bind(&SteerRelbot::follow_green_object, this, std::placeholders::_1));
+
 }
 
 void SteerRelbot::draw_L(double time) {
@@ -116,13 +120,21 @@ void SteerRelbot::calculate_velocity() {
     }
     
     /* End of your algorithm */
+}
 
-    
+void SteerRelbot::follow_green_object(const geometry_msgs::msg::PointStamped::SharedPtr msg) {
+    double x = msg->point.x;
+    double y = msg->point.y;
+    double gain = 3.0; // Proportional gain for steering
+
+    left_velocity = gain * y + gain * x;
+    right_velocity = -1 * gain * y + gain * x; 
 }
 
 void SteerRelbot::timer_callback() {
     // calculate velocity
-    calculate_velocity();
+    // calculate_velocity();
+    //follow_green_object();
 
     // publish velocity to simulator
     example_interfaces::msg::Float64 left_wheel;

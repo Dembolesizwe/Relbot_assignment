@@ -66,14 +66,25 @@ private:
             double cx = M.m10 / M.m00;
             double cy = M.m01 / M.m00;
 
+            // Get image size
+            int width = cv_image.cols;
+            int height = cv_image.rows;
+
+            // Normalize coordinates around center
+            double cx_norm = (cx - width / 2.0) / (width / 2.0);
+            double cy_norm_flip = (cy - height / 2.0) / (height / 2.0);
+
+            // Optional: flip y-axis so up is positive (more intuitive for robotics)
+            double cy_norm = -cy_norm_flip;
+
             geometry_msgs::msg::PointStamped point_msg;
             point_msg.header = msg->header;
-            point_msg.point.x = cx;
-            point_msg.point.y = cy;
+            point_msg.point.x = cx_norm;
+            point_msg.point.y = cy_norm;
             point_msg.point.z = 0.0;
             publisher_->publish(point_msg);
 
-            RCLCPP_INFO(this->get_logger(), "Green object center: x=%.1f, y=%.1f", cx, cy);
+            RCLCPP_INFO(this->get_logger(), "Green object center: x=%.1f, y=%.1f", cx_norm, cy_norm);
         } else {
             RCLCPP_INFO(this->get_logger(), "No green object detected (empty moments)");
         }

@@ -8,6 +8,7 @@
 
 // message type for velocity
 #include "example_interfaces/msg/float64.hpp"
+#include "geometry_msgs/msg/point_stamped.hpp" 
 
 class SteerRelbot : public rclcpp::Node
 {
@@ -23,6 +24,7 @@ private:
     // Topics
     rclcpp::Publisher<example_interfaces::msg::Float64>::SharedPtr left_wheel_topic_;
     rclcpp::Publisher<example_interfaces::msg::Float64>::SharedPtr right_wheel_topic_;
+    rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr green_object_position_;
 
     // Timer
     rclcpp::TimerBase::SharedPtr timer_;
@@ -40,6 +42,7 @@ private:
     void timer_callback();
     void calculate_velocity();
     void draw_L(double time);
+    void follow_green_object(const geometry_msgs::msg::PointStamped::SharedPtr msg);
     
 };
 
