@@ -14,6 +14,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(example_interfaces REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 
@@ -22,6 +23,7 @@ ament_target_dependencies(green_object_detector
   rclcpp
   sensor_msgs
   geometry_msgs
+  example_interfaces
   cv_bridge
   OpenCV
 )

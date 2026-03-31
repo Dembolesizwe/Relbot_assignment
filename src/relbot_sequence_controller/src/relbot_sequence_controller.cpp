@@ -26,17 +26,36 @@ void SteerRelbot::create_topics() {
     green_object_position_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
         "/object_center", 10, std::bind(&SteerRelbot::follow_green_object, this, std::placeholders::_1));
 
+    green_object_radius_ = this->create_subscription<example_interfaces::msg::Float64>(
+        "/object_radius", 10, std::bind(&SteerRelbot::update_green_object_radius, this, std::placeholders::_1));
+
 }
 
 void SteerRelbot::follow_green_object(const geometry_msgs::msg::PointStamped::SharedPtr green) {
-    double x = green->point.x;
-    double y = green->point.y;
-    double gain_velocity = 5.0; 
-    double gain_steering = 2.0;  
+    //get coordinates of green object
+    double x_green = green->point.x; 
 
-    left_velocity = gain_velocity * y + gain_steering * x;
-    right_velocity = -1 * gain_velocity * y + gain_steering * x; 
+    //set setpoints to get error
+    double setpoint_x = 0;
+    double setpoint_size = 0.8;
 
+    //set proportional gains for velocity and steering
+    double gain_velocity = 10.0; 
+    double gain_steering = 3.0;  
+
+    //Determine steering proportional to horizontal error. Subtract from 1 side, add to other side, so /2.
+    double steering = gain_steering * (x_green - setpoint_x)/2;
+    //Determine velocity proportional to vertical error. Subtract from setpoint, so that it goes faster when object is smaller (further away).
+    
+    double velocity = gain_velocity * (setpoint_size - object_radius);
+    if (object_radius <= 0.15) {
+        velocity = 0; // If no object detected, don't move forward
+        RCLCPP_INFO(this->get_logger(), "No object detected, stopping.");
+    }
+
+    //Compute motor commands. Left is negative because of the motors.
+    left_velocity = -1 * (velocity + steering);
+    right_velocity = velocity - steering; 
 }
 
 void SteerRelbot::timer_callback() {

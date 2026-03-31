@@ -4,6 +4,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "geometry_msgs/msg/point_stamped.hpp"
+#include "example_interfaces/msg/float64.hpp"
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
 
@@ -15,11 +16,13 @@ public:
   : Node("green_object_detector")
   {
     //Subscribe to the image topic
-    subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
+    subscription_camera_ = this->create_subscription<sensor_msgs::msg::Image>(
       "/image", 10, std::bind(&GreenObjectDetector::compute_center, this, std::placeholders::_1));
 
     //Publish the coordinates of the detected object
-    publisher_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/object_center", 10);
+    publisher_coordinates_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/object_center", 10);
+
+    publisher_radius_ = this->create_publisher<example_interfaces::msg::Float64>("/object_radius", 10);
     
     RCLCPP_INFO(this->get_logger(), "Green Object Detector Node has been started.");
   }
@@ -35,6 +38,13 @@ private:
         return;
     }
 
+    // Get image size
+    int width = cv_image.cols;
+    int height = cv_image.rows;
+
+    //Gaussian blur
+    cv::GaussianBlur(cv_image, cv_image, cv::Size(11, 11), 0);
+
     // Convert BGR to HSV
     cv::Mat hsv;
     cv::cvtColor(cv_image, hsv, cv::COLOR_BGR2HSV);
@@ -48,8 +58,9 @@ private:
     cv::inRange(hsv, lower_green, upper_green, mask);
 
     // --- Debug visualization ---
-    cv::imshow("Green Mask", mask);
-    cv::waitKey(1);
+    // Convert mask to color so we can draw on it
+    cv::Mat debug_image;
+    cv::cvtColor(mask, debug_image, cv::COLOR_GRAY2BGR);
 
     // Find contours
     std::vector<std::vector<cv::Point>> contours;
@@ -61,40 +72,51 @@ private:
                 return cv::contourArea(a) < cv::contourArea(b);
             });
 
-        cv::Moments M = cv::moments(*largest);
-        if (M.m00 > 0) {
-            double cx = M.m10 / M.m00;
-            double cy = M.m01 / M.m00;
+        // Fit circle to contour
+        cv::Point2f center;
+        float radius;
+        cv::minEnclosingCircle(*largest, center, radius);
 
-            // Get image size
-            int width = cv_image.cols;
-            int height = cv_image.rows;
+        //Draw contour and circle on debug image to show what it detects
+        //Draw contour (blue)
+        cv::drawContours(debug_image, std::vector<std::vector<cv::Point>>{*largest}, -1, cv::Scalar(255, 0, 0), 2);
+        //Draw enclosing circle (green)
+        cv::circle(debug_image, center, (int)radius, cv::Scalar(0, 255, 0), 2);
+        //Draw center (red)
+        cv::circle(debug_image, center, 5, cv::Scalar(0, 0, 255), -1);
+        //Show debug image
+        cv::imshow("Mask + Contour Debug", debug_image);
+        cv::waitKey(1); 
 
-            // Normalize coordinates around center
-            double cx_norm = (cx - width / 2.0) / (width / 2.0);
-            double cy_norm_flip = (cy - height / 2.0) / (height / 2.0);
+        //Publish radius
+        example_interfaces::msg::Float64 radius_norm;
+        //Normalize radius to height. If radius is half the height, then the circle is as big as image, so 1.
+        radius_norm.data = radius/cv_image.rows * 2.0;
+        publisher_radius_->publish(radius_norm);
 
-            // Optional: flip y-axis so up is positive (more intuitive for robotics)
-            double cy_norm = -cy_norm_flip;
+        //Publish center
+        //Normalize coordinates around center
+        double cx_norm = (center.x - width / 2.0) / (width / 2.0);
+        double cy_norm_flip = (center.y - height / 2.0) / (height / 2.0);
+        //Flip y-axis so up is positive (more intuitive)
+        double cy_norm = -cy_norm_flip;
 
-            geometry_msgs::msg::PointStamped point_msg;
-            point_msg.header = msg->header;
-            point_msg.point.x = cx_norm;
-            point_msg.point.y = cy_norm;
-            point_msg.point.z = 0.0;
-            publisher_->publish(point_msg);
+        geometry_msgs::msg::PointStamped point_msg;
+        point_msg.header = msg->header;
+        point_msg.point.x = cx_norm;
+        point_msg.point.y = cy_norm;
+        point_msg.point.z = 0.0;
+        publisher_coordinates_->publish(point_msg);
 
-            RCLCPP_INFO(this->get_logger(), "Green object center: x=%.2f, y=%.2f", cx_norm, cy_norm);
-        } else {
-            RCLCPP_INFO(this->get_logger(), "No green object detected (empty moments)");
-        }
+        RCLCPP_INFO(this->get_logger(), "GREEN OBJECT: center: x=%.2f, y=%.2f, radius: %.2f", cx_norm, cy_norm, radius_norm.data);
     } else {
-        RCLCPP_INFO(this->get_logger(), "No green object detected (no contours)");
+        RCLCPP_INFO(this->get_logger(), "No green object detected");
     }
 }
 
-  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
-  rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr publisher_;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_camera_;
+  rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr publisher_coordinates_;
+  rclcpp::Publisher<example_interfaces::msg::Float64>::SharedPtr publisher_radius_;
 };
 
 int main(int argc, char * argv[])

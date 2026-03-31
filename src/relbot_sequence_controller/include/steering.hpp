@@ -25,6 +25,7 @@ private:
     rclcpp::Publisher<example_interfaces::msg::Float64>::SharedPtr left_wheel_topic_;
     rclcpp::Publisher<example_interfaces::msg::Float64>::SharedPtr right_wheel_topic_;
     rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr green_object_position_;
+    rclcpp::Subscription<example_interfaces::msg::Float64>::SharedPtr green_object_radius_;
 
     // Timer
     rclcpp::TimerBase::SharedPtr timer_;
@@ -32,6 +33,7 @@ private:
     // attributes
     double left_velocity;
     double right_velocity;
+    double object_radius; 
 
     rclcpp::Time initial_time; //finds the initial time
     //bool loop_started = true;
@@ -41,7 +43,10 @@ private:
     void create_topics();
     void timer_callback();
     void follow_green_object(const geometry_msgs::msg::PointStamped::SharedPtr msg);
-    
+    void update_green_object_radius(const example_interfaces::msg::Float64::SharedPtr msg) {
+        object_radius = msg->data;
+    }
+
 };
 
 #endif /*STEER_RELBOT_HPP_*/
