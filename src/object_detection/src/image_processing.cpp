@@ -84,7 +84,7 @@ private:
             point_msg.point.z = 0.0;
             publisher_->publish(point_msg);
 
-            RCLCPP_INFO(this->get_logger(), "Green object center: x=%.1f, y=%.1f", cx_norm, cy_norm);
+            RCLCPP_INFO(this->get_logger(), "Green object center: x=%.2f, y=%.2f", cx_norm, cy_norm);
         } else {
             RCLCPP_INFO(this->get_logger(), "No green object detected (empty moments)");
         }

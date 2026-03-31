@@ -40,8 +40,6 @@ private:
     // methods
     void create_topics();
     void timer_callback();
-    void calculate_velocity();
-    void draw_L(double time);
     void follow_green_object(const geometry_msgs::msg::PointStamped::SharedPtr msg);
     
 };
