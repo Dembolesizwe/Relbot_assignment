@@ -28,6 +28,8 @@ void SteerRelbot::create_topics() {
 
     right_wheel_topic_ = this->create_publisher<example_interfaces::msg::Float64>(
         "/input/right_motor/setpoint_vel", 1);
+    Norm_coords=this->create_subscription<geometry_msgs::msg::PointStamped>("/center_pos",1);
+    
 }
 
 void SteerRelbot::draw_L(double time) {
@@ -63,6 +65,29 @@ void SteerRelbot::draw_L(double time) {
 void SteerRelbot::calculate_velocity() {
         
     /* Change the code here: */
+    float speed_x=centre_pos.x; //check if this is a float
+    float speed_y=centre_pos.y;
+
+    const float MAX_SPEED=5;
+
+
+    float left;
+    float right;
+
+
+    //make the turtle move straight
+    left=MAX_SPEED*speed_y;
+    right=MAX_SPEED*speed_y;
+
+    if (speed_x <=0 ){
+        left=left-2*speed_x*left;
+    }else if (speed_x > 0){
+        right=right-2*speed_x*right;
+    }
+    
+    left_velocity = 5;
+    right_velocity = -5;
+
 
     // Change this integer to change the shape the robot will drive in
     // 1. Straight Line
@@ -70,7 +95,10 @@ void SteerRelbot::calculate_velocity() {
     // 3. Straight then 90 degree left
     // 4. Square
     
-    static int shape_choice = 1; 
+    
+
+    /*
+    static int shape_choice = 2; 
 
     //find the current time
     rclcpp::Time current_time = this->get_clock()->now();
@@ -114,7 +142,7 @@ void SteerRelbot::calculate_velocity() {
             left_velocity = 0;
             right_velocity = 0;
     }
-    
+    */
     /* End of your algorithm */
 
     
