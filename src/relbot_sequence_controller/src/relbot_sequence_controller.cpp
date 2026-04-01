@@ -48,14 +48,19 @@ void SteerRelbot::follow_green_object(const geometry_msgs::msg::PointStamped::Sh
     //Determine velocity proportional to vertical error. Subtract from setpoint, so that it goes faster when object is smaller (further away).
     
     double velocity = gain_velocity * (setpoint_size - object_radius);
-    if (object_radius <= 0.15) {
-        velocity = 0; // If no object detected, don't move forward
-        RCLCPP_INFO(this->get_logger(), "No object detected, stopping.");
-    }
 
     //Compute motor commands. Left is negative because of the motors.
     left_velocity = -1 * (velocity + steering);
     right_velocity = velocity - steering; 
+
+
+    if (object_radius <= 0.1) {
+        left_velocity = 0; // If no object detected, don't move forward
+        right_velocity = 0;
+        RCLCPP_INFO(this->get_logger(), "No object detected, stopping.");
+    }
+
+    
 }
 
 void SteerRelbot::timer_callback() {

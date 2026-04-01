@@ -20,6 +20,14 @@ def generate_launch_description():
             output='screen'
         ),
         Node(
+            package='relbot_msgs',
+            executable='relbot_msgs'
+        ),
+        Node(
+            package='relbot_adapter',
+            executable='relbot_adapter'
+        ),
+        Node(
             package="relbot_simulator",
             executable="relbot_simulator",
             name="relbot_simulator"
